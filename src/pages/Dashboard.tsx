@@ -32,13 +32,14 @@ import {
   LogOut,
   MonitorPlay,
   Radio,
+  RefreshCw,
   Search,
   Server,
   Upload,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -108,7 +109,10 @@ export default function Dashboard() {
   const cameras = useQuery(api.cameras.list) ?? undefined;
   const nvrs = useQuery(api.cameras.listNvrs) ?? undefined;
   const stats = useQuery(api.cameras.stats) ?? undefined;
+  const syncSettings = useQuery(api.cameras.getSyncSettings);
   const importJson = useMutation(api.cameras.importJson);
+  const saveSyncSettings = useMutation(api.cameras.saveSyncSettings);
+  const syncNow = useAction(api.cameras.syncNow);
 
   const [search, setSearch] = useState("");
   const [nvrFilter, setNvrFilter] = useState<string>("all");
@@ -117,6 +121,21 @@ export default function Dashboard() {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
+
+  // URL sync state
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncUrl, setSyncUrl] = useState("");
+  const [autoSync, setAutoSync] = useState(false);
+  const [intervalMin, setIntervalMin] = useState(5);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    if (syncSettings) {
+      setSyncUrl(syncSettings.url ?? "");
+      setAutoSync(syncSettings.autoSync ?? false);
+      setIntervalMin(Math.max(1, Math.round((syncSettings.intervalSec ?? 300) / 60)));
+    }
+  }, [syncSettings]);
 
   const loading = authLoading || cameras === undefined;
 
@@ -188,6 +207,63 @@ export default function Dashboard() {
     }
   };
 
+  const handleSyncNow = async () => {
+    if (!/^https?:\/\//i.test(syncUrl.trim())) {
+      toast.error("Isi URL yang valid (http:// atau https://) terlebih dahulu.");
+      return;
+    }
+    setSyncing(true);
+    try {
+      await saveSyncSettings({
+        url: syncUrl.trim(),
+        autoSync,
+        intervalSec: Math.max(60, intervalMin * 60),
+      });
+      const res = await syncNow({});
+      if (res.ok) {
+        toast.success(
+          `Sinkron selesai: ${res.created} kamera baru, ${res.updated} diperbarui.`,
+        );
+        setSyncOpen(false);
+      } else {
+        toast.error(`Sync gagal: ${res.error ?? "kesalahan tidak diketahui"}`);
+      }
+    } catch {
+      toast.error("Gagal sinkron. Periksa URL dan coba lagi.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAutoSyncToggle = async (checked: boolean) => {
+    if (checked && !/^https?:\/\//i.test(syncUrl.trim())) {
+      toast.error("Isi URL terlebih dahulu sebelum mengaktifkan auto-sync.");
+      return;
+    }
+    setAutoSync(checked);
+    try {
+      await saveSyncSettings({
+        url: syncUrl.trim(),
+        autoSync: checked,
+        intervalSec: Math.max(60, intervalMin * 60),
+      });
+      if (checked) {
+        toast.success(`Auto-sync aktif setiap ${intervalMin} menit.`);
+      }
+    } catch {
+      setAutoSync(!checked);
+      toast.error("Gagal menyimpan pengaturan auto-sync.");
+    }
+  };
+
+  const syncStatusText = syncSettings?.lastSyncAt
+    ? new Date(syncSettings.lastSyncAt).toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : null;
+
   const displayName = user?.name ?? user?.email ?? "Operator";
 
   return (
@@ -211,6 +287,108 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-white/60 bg-white/50 hover:bg-white/80"
+                >
+                  <RefreshCw className="size-3.5" />
+                  <span className="hidden sm:inline">Sync dari URL</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="glass-strong max-w-lg border-white/70">
+                <DialogHeader>
+                  <DialogTitle>Sinkronisasi dari URL</DialogTitle>
+                  <DialogDescription>
+                    Server akan mengambil JSON kamera langsung dari URL — tanpa
+                    copy-paste, tanpa masalah CORS.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-sky-950">
+                      URL JSON kamera
+                    </label>
+                    <Input
+                      value={syncUrl}
+                      onChange={(e) => setSyncUrl(e.target.value)}
+                      placeholder="http://10.2.187.11:5000/status"
+                      className="border-white/60 bg-white/60 font-mono text-xs text-sky-950 placeholder:text-sky-900/40"
+                      disabled={syncing}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-white/50 px-3 py-2.5 ring-1 ring-white/60">
+                    <div>
+                      <p className="text-xs font-semibold text-sky-950">
+                        Auto-sync berkala
+                      </p>
+                      <p className="text-[11px] text-sky-900/55">
+                        Tarik data otomatis setiap N menit
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={autoSync}
+                      disabled={syncing}
+                      onChange={(e) => handleAutoSyncToggle(e.target.checked)}
+                      className="size-4 accent-sky-500"
+                    />
+                  </div>
+                  {autoSync && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-sky-950">
+                        Interval (menit, min. 1)
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={intervalMin}
+                        onChange={(e) =>
+                          setIntervalMin(
+                            Math.max(1, parseInt(e.target.value || "1", 10)),
+                          )
+                        }
+                        className="border-white/60 bg-white/60 text-sky-950"
+                        disabled={syncing}
+                      />
+                    </div>
+                  )}
+                  {syncSettings?.lastSyncAt && (
+                    <p className="text-[11px] text-sky-900/55">
+                      Sinkron terakhir: {syncStatusText} —{" "}
+                      {syncSettings.lastStatus === "ok" ? (
+                        <span className="font-semibold text-emerald-600">berhasil</span>
+                      ) : (
+                        <span className="font-semibold text-rose-500">
+                          gagal ({syncSettings.lastError ?? "unknown"})
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setSyncOpen(false)}
+                    disabled={syncing}
+                  >
+                    Tutup
+                  </Button>
+                  <Button
+                    onClick={handleSyncNow}
+                    disabled={syncing || syncUrl.trim() === ""}
+                    className="gap-1.5"
+                  >
+                    <RefreshCw
+                      className={`size-3.5 ${syncing ? "animate-spin" : ""}`}
+                    />
+                    {syncing ? "Menyinkron..." : "Sinkron Sekarang"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Dialog open={importOpen} onOpenChange={setImportOpen}>
               <DialogTrigger asChild>
                 <Button

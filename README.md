@@ -14,7 +14,7 @@ Dibangun dengan React + Vite + **Convex self-hosted** (database & auth lokal) + 
 - **Filter by NVR** — dropdown NVR dengan jumlah kamera per NVR.
 - **Custom filtering** — pencarian bebas (nama/ID/IP kamera), filter status online/offline, sorting.
 - **Multi login user** — email + password (tanpa internet — cocok untuk server LAN), atau kode email OTP, atau tamu.
-- **Import JSON** — tempel data kamera hasil export NVR; data di-upsert berdasarkan ID kamera tanpa duplikat.
+- **Sync dari URL (tanpa import manual)** — server mengambil JSON kamera langsung dari URL (mis. `http://10.2.187.11:5000/status`), dengan opsi **auto-sync berkala** (cron tiap menit, interval bisa diatur). Import JSON manual tetap tersedia sebagai cadangan.
 - **Statistik realtime** — total kamera, online, offline, jumlah NVR aktif.
 
 ## Arsitektur
@@ -97,6 +97,24 @@ docker compose up -d --build
 
 Pertama kali membuka aplikasi, klik **"Belum punya akun? Daftar"** untuk membuat akun
 pertama, lalu buat akun untuk anggota tim lainnya.
+
+### 5. Aktifkan sync dari URL
+
+Di dashboard, klik **"Sync dari URL"** → isi alamat JSON kamera Anda, mis.:
+
+```
+http://10.2.187.11:5000/status
+```
+
+- **Sinkron Sekarang** — tarik data sekarang juga.
+- **Auto-sync berkala** — server menarik data otomatis setiap N menit
+  (cron Convex menitik setiap menit dan menyinkronkan saat interval tercapai).
+- Status sinkron terakhir (waktu, berhasil/gagal, jumlah kamera baru/diperbarui)
+  tampil di dialog.
+
+> Karena fetch dilakukan oleh **backend di server** (bukan browser), tidak ada
+> masalah CORS dan URL internal 10.x pun bisa dibaca selama server bisa
+> mengaksesnya.
 
 ## Backup Database
 

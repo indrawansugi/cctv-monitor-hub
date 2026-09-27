@@ -48,6 +48,19 @@ const schema = defineSchema(
       .index("by_camera_id", ["cameraId"])
       .index("by_nvr", ["nvr"])
       .index("by_status", ["status"]),
+
+    // Single-row settings for pulling camera JSON directly from a URL
+    syncSettings: defineTable({
+      url: v.string(), // e.g. http://10.2.187.11:5000/status
+      autoSync: v.boolean(), // pull periodically in the background
+      intervalSec: v.number(), // auto-sync interval in seconds (min 60)
+      lastSyncAt: v.optional(v.number()),
+      lastStatus: v.optional(v.string()), // "ok" | "error"
+      lastError: v.optional(v.string()),
+      lastCounts: v.optional(
+        v.object({ created: v.number(), updated: v.number() }),
+      ),
+    })
   },
   {
     schemaValidation: false,
