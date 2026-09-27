@@ -65,24 +65,60 @@ docker compose up -d backend
 docker compose exec backend ./generate_admin_key.sh
 ```
 
-Simpan output key-nya. Lalu buat file `.env.local` (di root proyek, jangan di-commit):
+Simpan output key-nya, mis. `0135d859...`. Lalu deploy functions dari komputer
+yang bisa menjangkau backend. Pilih salah satu:
+
+**Opsi A — via URL dari dalam jaringan server (disarankan):**
+
+```bash
+# Cek alamat backend dari dalam Docker:
+docker compose exec backend sh -c 'curl -s http://localhost:3210/version'
+```
+
+Buat file `.env.local` di root proyek (jangan di-commit):
 
 ```env
-CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
+CONVEX_SELF_HOSTED_URL=http://<ip-lan-server>:3210
 CONVEX_SELF_HOSTED_ADMIN_KEY=<admin-key-dari-langkah-sebelumnya>
 ```
 
-> Jika backend sudah berjalan dan port 3210 hanya di dalam jaringan Docker,
-> jalankan sementara `docker compose port backend 3210` atau akses via
-> `docker compose exec backend curl -s http://localhost:3210/version` untuk verifikasi.
-> Alternatif termudah: buka sementara `ports: ["3210:3210"]` pada service `backend`
-> di `docker-compose.yml`, deploy functions, lalu tutup kembali.
+> Untuk opsi A, backend perlu sementara terbuka ke LAN. Tambahkan sementara di
+> service `backend` pada `docker-compose.yml`:
+>
+> ```yaml
+>     ports:
+>       - "3210:3210"
+> ```
+>
+> lalu `docker compose up -d backend`. Setelah functions ter-deploy, hapus
+> lagi blok `ports:` tersebut dan `docker compose up -d backend` (port ditutup).
 
-Deploy functions:
+**Opsi B — dari mesin Anda sendiri (tanpa buka port):**
+
+Jalankan CLI Convex di komputer kerja Anda dengan SSH tunnel ke server:
 
 ```bash
-npx convex dev        # deploy skema + functions ke backend lokal (jawab "y" bila diminta)
+ssh -L 3210:127.0.0.1:3210 root@<ip-server>   # biarkan terminal ini terbuka
 ```
+
+Di komputer Anda (folder proyek), buat `.env.local`:
+
+```env
+CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
+CONVEX_SELF_HOSTED_ADMIN_KEY=<admin-key>
+```
+
+lalu:
+
+```bash
+bun install
+bunx convex dev --once
+```
+
+> Backend self-hosted tidak punya akses internet, jadi jika CLI mencoba
+> "anonymous deployment" cloud, pastikan `CONVEX_SELF_HOSTED_URL` dan
+> `CONVEX_SELF_HOSTED_ADMIN_KEY` sudah benar di `.env.local` — CLI akan
+> memakai URL tersebut, bukan cloud.
 
 ### 3. Build & jalankan semua layanan
 

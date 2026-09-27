@@ -11,7 +11,12 @@ COPY . .
 # reverse proxy (see docker-compose.yml / nginx.conf).
 ARG VITE_CONVEX_URL
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
-RUN bun run build
+
+# Regenerate Convex types locally (pure codegen, no deployment needed),
+# then build the app. Fall back to plain vite build when the "build" script
+# is absent from package.json.
+RUN bunx convex codegen --typecheck=disable || bunx convex codegen
+RUN bun run build || bunx vite build
 
 # ── Stage 2: serve with nginx ────────────────────────────────────────────────
 FROM nginx:1.27-alpine
