@@ -16,8 +16,15 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import { GlassBackground } from "@/components/GlassBackground";
-import { MonitorPlay } from "lucide-react";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import {
+  ArrowRight,
+  KeyRound,
+  Loader2,
+  Mail,
+  UserX,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -43,8 +50,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     searchParams.get("returnTo"),
     redirectAfterAuth,
   );
-  const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
+  const [step, setStep] = useState<
+    "signIn" | { email: string } | "passwordSignIn" | "signUp"
+  >("passwordSignIn");
   const [otp, setOtp] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +63,38 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     }
   }, [authLoading, isAuthenticated, navigate, redirect]);
+
+  // ── Email + password (local server friendly) ──────────────────────────────
+  const handlePasswordAuth = async (
+    event: React.FormEvent<HTMLFormElement>,
+    flow: "signIn" | "signUp",
+  ) => {
+    event.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData(event.currentTarget);
+      const email = formData.get("email") as string;
+      const password = formData.get("password") as string;
+      const name = (formData.get("name") as string) || undefined;
+
+      await signIn("password", { email, password, ...(flow === "signUp" ? { name } : {}) });
+      navigate(redirect);
+    } catch (err) {
+      console.error("Password sign-in error:", err);
+      const message = err instanceof Error ? err.message : "Terjadi kesalahan.";
+      if (/InvalidAccountID|account.*not.*found|Unknown/i.test(message)) {
+        setError("Email belum terdaftar. Silakan daftar terlebih dahulu.");
+      } else if (/Secret|password/i.test(message)) {
+        setError("Email atau password salah.");
+      } else {
+        setError(message);
+      }
+      setIsLoading(false);
+    }
+  };
+
+  // ── Email OTP (cloud mode) ────────────────────────────────────────────────
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -107,6 +149,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
+  const inputCls = "border-white/60 bg-white/60 text-sky-950 placeholder:text-sky-900/40";
+  const outlineBtnCls = "border-white/60 bg-white/50 hover:bg-white/80";
+
+  const isPasswordFlow = step === "passwordSignIn" || step === "signUp";
+
   return (
     <div className="relative flex min-h-screen flex-col">
       <GlassBackground />
@@ -123,14 +170,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       className="mb-4 mt-4 flex size-16 cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-500 text-white shadow-lg shadow-sky-500/30 transition hover:scale-105"
                       onClick={() => navigate("/")}
                     >
-                      <MonitorPlay className="size-8" />
+                      <Mail className="size-8" />
                     </div>
                   </div>
                   <CardTitle className="text-xl text-sky-950">
-                    Masuk ke CCTV Monitor Hub
+                    Masuk dengan Email
                   </CardTitle>
                   <CardDescription>
-                    Masukkan email Anda untuk login atau daftar
+                    Kode verifikasi akan dikirim ke email Anda
                   </CardDescription>
                 </CardHeader>
                 <form onSubmit={handleEmailSubmit}>
@@ -142,7 +189,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           name="email"
                           placeholder="nama@contoh.com"
                           type="email"
-                          className="border-white/60 bg-white/60 pl-9 text-sky-950 placeholder:text-sky-900/40"
+                          className={inputCls}
                           disabled={isLoading}
                           required
                         />
@@ -152,7 +199,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         variant="outline"
                         size="icon"
                         disabled={isLoading}
-                        className="border-white/60 bg-white/50 hover:bg-white/80"
+                        className={outlineBtnCls}
                       >
                         {isLoading ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -180,14 +227,174 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       <Button
                         type="button"
                         variant="outline"
-                        className="mt-4 w-full border-white/60 bg-white/50 hover:bg-white/80"
+                        className={`mt-4 w-full ${outlineBtnCls}`}
                         onClick={handleGuestLogin}
                         disabled={isLoading}
                       >
                         <UserX className="mr-2 h-4 w-4" />
                         Masuk sebagai Tamu
                       </Button>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="mt-1 w-full text-sky-600"
+                        onClick={() => setStep("passwordSignIn")}
+                      >
+                        Kembali ke login email &amp; password
+                      </Button>
                     </div>
+                  </CardContent>
+                </form>
+              </>
+            ) : step === "passwordSignIn" || step === "signUp" ? (
+              <>
+                <CardHeader className="text-center">
+                  <div className="flex justify-center">
+                    <div
+                      className="mb-4 mt-4 flex size-16 cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-500 text-white shadow-lg shadow-sky-500/30 transition hover:scale-105"
+                      onClick={() => navigate("/")}
+                    >
+                      <KeyRound className="size-8" />
+                    </div>
+                  </div>
+                  <CardTitle className="text-xl text-sky-950">
+                    {step === "signUp" ? "Daftar Akun Baru" : "Masuk"}
+                  </CardTitle>
+                  <CardDescription>
+                    {step === "signUp"
+                      ? "Buat akun untuk Anda atau anggota tim Anda"
+                      : "Gunakan email dan password tim Anda"}
+                  </CardDescription>
+                </CardHeader>
+                <form
+                  onSubmit={(e) =>
+                    handlePasswordAuth(
+                      e,
+                      step === "signUp" ? "signUp" : "signIn",
+                    )
+                  }
+                >
+                  <CardContent className="flex flex-col gap-3">
+                    {step === "signUp" && (
+                      <div className="relative">
+                        <UserX className="absolute left-3 top-3 h-4 w-4 text-sky-400" />
+                        <Input
+                          name="name"
+                          placeholder="Nama lengkap"
+                          className={`${inputCls} pl-9`}
+                          disabled={isLoading}
+                        />
+                      </div>
+                    )}
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-sky-400" />
+                      <Input
+                        name="email"
+                        placeholder="nama@contoh.com"
+                        type="email"
+                        className={`${inputCls} pl-9`}
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-3 h-4 w-4 text-sky-400" />
+                      <Input
+                        name="password"
+                        placeholder={
+                          step === "signUp"
+                            ? "Password (min. 8 karakter)"
+                            : "Password"
+                        }
+                        type={showPassword ? "text" : "password"}
+                        minLength={step === "signUp" ? 8 : undefined}
+                        className={`${inputCls} pl-9 pr-10`}
+                        disabled={isLoading}
+                        required
+                      />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-3 top-3 text-sky-400 hover:text-sky-600"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    {error && (
+                      <p className="text-sm text-rose-500">{error}</p>
+                    )}
+
+                    <Button
+                      type="submit"
+                      className="mt-1 w-full bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-md shadow-sky-500/30 hover:from-sky-600 hover:to-cyan-600"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Memproses...
+                        </>
+                      ) : step === "signUp" ? (
+                        <>
+                          Daftar
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      ) : (
+                        <>
+                          Masuk
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      disabled={isLoading}
+                      onClick={() =>
+                        setStep(step === "signUp" ? "passwordSignIn" : "signUp")
+                      }
+                    >
+                      {step === "signUp"
+                        ? "Sudah punya akun? Masuk"
+                        : "Belum punya akun? Daftar"}
+                    </Button>
+
+                    <div className="relative mt-1">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-sky-200/70" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-transparent px-2 text-sky-900/45">
+                          Atau
+                        </span>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={`w-full ${outlineBtnCls}`}
+                      onClick={handleGuestLogin}
+                      disabled={isLoading}
+                    >
+                      <UserX className="mr-2 h-4 w-4" />
+                      Masuk sebagai Tamu
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="-mt-1 w-full text-sky-600"
+                      onClick={() => setStep("signIn")}
+                    >
+                      Login dengan kode email (OTP)
+                    </Button>
                   </CardContent>
                 </form>
               </>

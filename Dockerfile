@@ -7,6 +7,8 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY . .
+# VITE_CONVEX_URL points to the local self-hosted Convex backend via the
+# reverse proxy (see docker-compose.yml / nginx.conf).
 ARG VITE_CONVEX_URL
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
 RUN bun run build

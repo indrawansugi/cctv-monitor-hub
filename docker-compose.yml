@@ -1,11 +1,19 @@
-# CCTV Monitor Hub — deployment stack
+# CCTV Monitor Hub — deployment stack lokal (database di server Anda)
 #
-# 1. Put your Convex HTTP URL in the VITE_CONVEX_URL build arg:
-#      docker compose build --build-arg VITE_CONVEX_URL=https://<your-deployment>.convex.cloud
-#    or set it in a .env file next to this file:
-#      VITE_CONVEX_URL=https://<your-deployment>.convex.cloud
-# 2. Build & start:  docker compose up -d --build
-# 3. Open:           http://localhost:8080
+# Semua layanan berjalan di server Linux ini:
+#   web       → aplikasi monitoring (default port 8092)
+#   backend   → Convex self-hosted: database + auth + functions (data di volume Docker)
+#   dashboard → Convex dashboard (opsional, untuk inspeksi data)
+#
+# 1) Salin convex.conf → .env dan isi secret:
+#      cp convex.conf .env && ./scripts/generate-secrets.sh
+#    (atau isi INSTANCE_SECRET & JWT_PRIVATE_KEY manual di .env)
+# 2) Deploy functions ke backend lokal:
+#      npx convex dev          (CONVEX_SELF_HOSTED_URL & ADMIN_KEY di .env.local)
+#    Lihat README bagian "Deploy Functions" untuk detail.
+# 3) Build & start:
+#      docker compose up -d --build
+# 4) Buka:  http://<ip-server>:8092
 
 services:
   web:
@@ -13,8 +21,50 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - VITE_CONVEX_URL=${VITE_CONVEX_URL:?Set VITE_CONVEX_URL in .env or pass --build-arg}
+        - VITE_CONVEX_URL=${PUBLIC_WEB_URL}/api/convex
     image: cctv-monitor-web
     ports:
-      - "8080:80"
+      - "${WEB_PORT:-8092}:80"
     restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    expose:
+      - "3210"
+      - "3211"
+    volumes:
+      - convex-data:/convex/data
+    environment:
+      # ── Convex self-hosted essentials ──
+      - INSTANCE_NAME=${INSTANCE_NAME:-cctv-monitor}
+      - INSTANCE_SECRET=${INSTANCE_SECRET:?Isi INSTANCE_SECRET di .env (jalankan scripts/generate-secrets.sh)}
+      - CONVEX_CLOUD_ORIGIN=${PUBLIC_WEB_URL}/api/convex
+      - CONVEX_SITE_ORIGIN=${PUBLIC_WEB_URL}/api/convex-site
+      # ── Convex Auth (login) ──
+      - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY:?Isi JWT_PRIVATE_KEY di .env (jalankan scripts/generate-secrets.sh)}
+      - CONVEX_SITE_URL=${PUBLIC_WEB_URL}/api/convex-site
+      - DISABLE_BEACON=1
+    healthcheck:
+      test: curl -f http://localhost:3210/version
+      interval: 5s
+      start_period: 10s
+
+  dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${CONVEX_DASHBOARD_PORT:-6791}:6791"
+    environment:
+      - NEXT_PUBLIC_DEPLOYMENT_URL=http://backend:3210
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  convex-data:
