@@ -46,6 +46,9 @@ import { toast } from "sonner";
 type StatusFilter = "all" | "online" | "offline";
 type SortMode = "name" | "status" | "id";
 
+// Default sumber data JSON untuk versi lokal — server CCTV Anda.
+const DEFAULT_SYNC_URL = "http://10.2.187.11:5000/status";
+
 function StatCard({
   icon,
   label,
@@ -124,14 +127,14 @@ export default function Dashboard() {
 
   // URL sync state
   const [syncOpen, setSyncOpen] = useState(false);
-  const [syncUrl, setSyncUrl] = useState("");
+  const [syncUrl, setSyncUrl] = useState(DEFAULT_SYNC_URL);
   const [autoSync, setAutoSync] = useState(false);
   const [intervalMin, setIntervalMin] = useState(5);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (syncSettings) {
-      setSyncUrl(syncSettings.url ?? "");
+      setSyncUrl(syncSettings.url ?? DEFAULT_SYNC_URL);
       setAutoSync(syncSettings.autoSync ?? false);
       setIntervalMin(Math.max(1, Math.round((syncSettings.intervalSec ?? 300) / 60)));
     }
