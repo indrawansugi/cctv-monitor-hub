@@ -1,0 +1,20 @@
+# CCTV Monitor Hub — deployment stack
+#
+# 1. Put your Convex HTTP URL in the VITE_CONVEX_URL build arg:
+#      docker compose build --build-arg VITE_CONVEX_URL=https://<your-deployment>.convex.cloud
+#    or set it in a .env file next to this file:
+#      VITE_CONVEX_URL=https://<your-deployment>.convex.cloud
+# 2. Build & start:  docker compose up -d --build
+# 3. Open:           http://localhost:8080
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_CONVEX_URL=${VITE_CONVEX_URL:?Set VITE_CONVEX_URL in .env or pass --build-arg}
+    image: cctv-monitor-web
+    ports:
+      - "8080:80"
+    restart: unless-stopped

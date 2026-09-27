@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+.env.*
+sst-env.d.ts
+package-lock.json
+*.log
+README.md

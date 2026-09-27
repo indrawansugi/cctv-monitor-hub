@@ -1,0 +1,17 @@
+{
+  "name": "CCTV Monitor Hub",
+  "short_name": "CCTV Monitor",
+  "description": "Web monitoring CCTV multi-NVR & multi-user",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f9ff",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
